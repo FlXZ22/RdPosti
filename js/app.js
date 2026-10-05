@@ -15,6 +15,17 @@
     return n;
   };
   const uid = () => Math.random().toString(36).slice(2, 9);
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  /** Icona SVG dallo sprite in index.html (id senza prefisso "i-"). */
+  const icon = (id, cls) => {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('class', 'ic' + (cls ? ' ' + cls : ''));
+    svg.setAttribute('aria-hidden', 'true');
+    const use = document.createElementNS(SVG_NS, 'use');
+    use.setAttribute('href', '#i-' + id);
+    svg.appendChild(use);
+    return svg;
+  };
 
   // ---------------------------------------------------------------- Stato
   let state = load() || defaultState();
@@ -23,9 +34,7 @@
   let lastEval = null;
 
   function defaultState() {
-    const s = { cols: 12, rows: 11, items: [], namesText: '', rules: [], assign: {} };
-    s.items = preset('pairs', s.cols, s.rows);
-    return s;
+    return { cols: 12, rows: 11, items: [], namesText: '', rules: [], assign: {} };
   }
 
   function load() {
@@ -230,18 +239,11 @@
   const px = (b) => ({ left: b.left + 'px', top: b.top + 'px', width: b.width + 'px', height: b.height + 'px' });
 
   function renderStats(d) {
-    const stats = $('#stats');
-    stats.textContent = '';
-    const add = (v, label) => {
-      const s = el('div', 'stat');
-      s.appendChild(el('b', null, v));
-      s.appendChild(el('span', null, label));
-      stats.appendChild(s);
-    };
-    add(d.layout.seats.length, 'banchi');
-    add(d.layout.groupCount, 'gruppi');
-    add(d.layout.seats.length ? d.layout.maxRank + 1 : 0, 'file');
-    add(d.students.length, 'studenti');
+    const n = d.layout.seats.length;
+    $('#stats').textContent = n
+      ? `${n} banchi · ${d.layout.groupCount} gruppi · ${d.layout.maxRank + 1} file`
+      : 'Nessun banco';
+    $('#roomEmpty').hidden = state.items.length > 0;
   }
 
   function renderNames(d) {
@@ -308,17 +310,15 @@
         li.classList.add('inactive');
         li.title = 'Uno degli studenti non è più nella lista: regola ignorata';
       } else if (brokenSet.has(r)) li.classList.add('broken');
-      li.appendChild(el('span', null, t.icon));
+      li.appendChild(icon(t.icon));
       const txt = el('span');
-      txt.appendChild(el('b', null, r.a));
-      if (t.pair) {
-        txt.appendChild(document.createTextNode(' e '));
-        txt.appendChild(el('b', null, r.b));
-      }
-      txt.appendChild(document.createTextNode(' — ' + t.label.toLowerCase()));
+      txt.appendChild(document.createTextNode(t.pair ? `${r.a} e ${r.b} ` : `${r.a} `));
+      txt.appendChild(el('span', 'muted', t.label.toLowerCase()));
       li.appendChild(txt);
-      const del = el('button', 'del', '×');
+      const del = el('button', 'icon-btn del');
+      del.appendChild(icon('x', 'sm'));
       del.title = 'Elimina regola';
+      del.setAttribute('aria-label', 'Elimina regola');
       del.addEventListener('click', () => {
         state.rules = state.rules.filter((x) => x !== r);
         render();
@@ -329,26 +329,33 @@
 
     $('#rulesBadge').textContent = d.compiled.length;
     const status = $('#rulesStatus');
-    if (!d.ev) { status.textContent = ''; status.className = 'status'; }
-    else if (!d.ev.violations.length) { status.textContent = '✓ tutte rispettate'; status.className = 'status ok'; }
-    else { status.textContent = `${d.ev.violations.length} non rispettate`; status.className = 'status bad'; }
+    status.textContent = '';
+    status.className = 'status';
+    if (d.ev && !d.ev.violations.length) {
+      status.classList.add('ok');
+      status.append(icon('check', 'sm'), 'tutte rispettate');
+    } else if (d.ev) {
+      status.classList.add('bad');
+      status.append(icon('alert', 'sm'), `${d.ev.violations.length} non rispettate`);
+    }
   }
 
   function renderViolations(d) {
     const ul = $('#violations');
     ul.textContent = '';
     if (!d.ev) {
-      ul.appendChild(el('li', 'empty-note', 'Premi "Genera disposizione" per vedere il risultato.'));
+      ul.appendChild(el('li', 'empty-note', 'Genera una disposizione per vedere il risultato.'));
       return;
     }
     if (!d.ev.violations.length) {
-      ul.appendChild(el('li', 'ok', d.compiled.length ? '✓ Tutte le regole sono rispettate' : '✓ Disposizione casuale (nessuna regola attiva)'));
+      const li = el('li', 'ok');
+      li.append(icon('check'), d.compiled.length ? 'Tutte le regole sono rispettate' : 'Disposizione casuale, nessuna regola attiva');
+      ul.appendChild(li);
       return;
     }
     for (const v of d.ev.violations) {
-      const li = el('li', v.severe ? 'severe' : '');
-      li.appendChild(el('span', 'sev'));
-      li.appendChild(el('span', null, v.text));
+      const li = el('li', v.severe ? 'severe' : 'warn');
+      li.append(icon('alert'), v.text);
       ul.appendChild(li);
     }
   }
@@ -566,7 +573,7 @@
     render();
     const missing = students.length - layout.seats.length;
     if (missing > 0) toast(`Attenzione: ${missing} studenti senza banco`);
-    else if (!res.violations.length) toast(state.rules.length ? 'Fatto! Tutte le regole rispettate ✓' : 'Disposizione generata');
+    else if (!res.violations.length) toast(state.rules.length ? 'Fatto, tutte le regole rispettate' : 'Disposizione generata');
     else toast(`Fatto, ma ${res.violations.length} regole non si possono rispettare con questa aula`);
   });
 
@@ -577,18 +584,32 @@
   });
 
   // ---------------------------------------------------------------- Regole
-  const ruleType = $('#ruleType');
-  fillSelect(ruleType, Object.entries(RULE_TYPES).map(([k, t]) => [k, `${t.icon}  ${t.label}`]));
+  let ruleType = 'separa';
+  const picker = $('#typePicker');
+  for (const [key, t] of Object.entries(RULE_TYPES)) {
+    const b = el('button', 'type-opt');
+    b.type = 'button';
+    b.dataset.type = key;
+    b.setAttribute('role', 'radio');
+    b.title = t.label;
+    b.append(icon(t.icon, 'sm'), t.short);
+    b.addEventListener('click', () => {
+      ruleType = key;
+      updateRuleBState();
+    });
+    picker.appendChild(b);
+  }
   function updateRuleBState() {
-    const pair = RULE_TYPES[ruleType.value].pair;
+    const pair = RULE_TYPES[ruleType].pair;
+    picker.querySelectorAll('.type-opt').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.type === ruleType)));
     $('#ruleB').disabled = !pair;
     $('#ruleB').style.display = pair ? '' : 'none';
+    $('#ruleJoin').style.display = pair ? '' : 'none';
   }
-  ruleType.addEventListener('change', updateRuleBState);
 
   $('#ruleForm').addEventListener('submit', (e) => {
     e.preventDefault();
-    const type = ruleType.value;
+    const type = ruleType;
     const pair = RULE_TYPES[type].pair;
     const a = $('#ruleA').value;
     const b = pair ? $('#ruleB').value : '';

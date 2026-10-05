@@ -16,12 +16,12 @@
   const REL = { NONE: 0, SIDE: 1, FRONTBACK: 2, DIAG: 3, GROUP: 4 };
 
   const RULE_TYPES = {
-    separa:   { label: 'Non devono stare vicini', pair: true,  icon: '⛔' },
-    vicini:   { label: 'Devono stare vicini',     pair: true,  icon: '🤝' },
-    prima:    { label: 'In prima fila',            pair: false, icon: '⬆️' },
-    noPrima:  { label: 'Non in prima fila',        pair: false, icon: '🚫⬆️' },
-    ultima:   { label: 'In ultima fila',           pair: false, icon: '⬇️' },
-    noUltima: { label: 'Non in ultima fila',       pair: false, icon: '🚫⬇️' },
+    separa:   { label: 'Non devono stare vicini', short: 'Lontani',        pair: true,  icon: 'ban' },
+    vicini:   { label: 'Devono stare vicini',     short: 'Vicini',         pair: true,  icon: 'link' },
+    prima:    { label: 'In prima fila',            short: 'Prima fila',     pair: false, icon: 'front' },
+    noPrima:  { label: 'Non in prima fila',        short: 'No prima fila',  pair: false, icon: 'not-front' },
+    ultima:   { label: 'In ultima fila',           short: 'Ultima fila',    pair: false, icon: 'back' },
+    noUltima: { label: 'Non in ultima fila',       short: 'No ultima fila', pair: false, icon: 'not-back' },
   };
 
   // Penalità: più alto = più grave

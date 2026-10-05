@@ -12,7 +12,7 @@ evitando di mettere vicine le persone incompatibili.
    - doppio clic su un oggetto, oppure trascinarlo fuori dall'aula → rimuovilo
    - clic destro sulla cattedra → ruotala
 3. **Studenti (destra)**: scrivi `Nome Cognome, Nome Cognome, ...`: la tabella si compila da sola.
-4. **Regole (in basso, icona ☰✕)**: scegli chi *non deve stare vicino* a chi, chi deve stare vicino,
+4. **Regole (in basso, clic sull'icona)**: scegli chi *non deve stare vicino* a chi, chi deve stare vicino,
    chi va in prima/ultima fila (o non ci deve andare).
 5. Premi **Genera disposizione**. Ogni volta esce una disposizione casuale diversa che rispetta le regole.
    Clicca due banchi per scambiare a mano due studenti: le regole vengono ricontrollate subito.
@@ -32,6 +32,11 @@ con *Stampa* ottieni la piantina.
   gli scambi che abbassano la penalità vengono accettati, quelli che la alzano solo ogni tanto (sempre meno col passare
   del tempo), così l'algoritmo non resta bloccato. Se le regole sono impossibili da rispettare tutte, mostra quelle violate.
 
+## Font e icone
+
+- Il font del logo è **Della Respira** (SIL Open Font License, vedi `assets/fonts/OFL.txt`), incluso in locale e usato in tutta l'app.
+- Le icone sono SVG lineari (stile Lucide) definite una volta in `index.html` e riusate con `<use href="#i-...">`.
+
 ## Test
 
 ```bash
@@ -48,4 +53,5 @@ js/solver.js        geometria dell'aula + algoritmo
 js/app.js           interfaccia, drag & drop, regole
 tests/              test dell'algoritmo (node --test)
 assets/logo.png     logo
+assets/fonts/       font Della Respira + licenza
 ```
