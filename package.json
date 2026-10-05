@@ -4,8 +4,18 @@
   "description": "Disposizione intelligente dei posti in classe",
   "private": true,
   "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "preview": "npx serve out",
     "test": "node --test tests/solver.test.js",
-    "test:e2e": "node tests/e2e.js"
+    "test:e2e": "next build && node tests/e2e.js"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0",
+    "next": "^16.3.8",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  }
 }
