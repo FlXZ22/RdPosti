@@ -1,11 +1,16 @@
 <p align="center"><img src="assets/logo.png" alt="RdPosti" height="70"></p>
 
-**RdPosti** è un'app web (HTML + CSS + JavaScript, senza installazioni) per creare la disposizione dei posti in classe
+**RdPosti** è un'app web (Next.js + JavaScript) per creare la disposizione dei posti in classe
 evitando di mettere vicine le persone incompatibili.
 
 ## Come si usa
 
-1. Apri `index.html` nel browser (doppio clic sul file va benissimo).
+1. Avvia l'app:
+   ```bash
+   npm install
+   npm run dev        # http://localhost:3000
+   ```
+   Per la versione finale: `npm run build` crea il sito statico in `out/` (`npm run preview` per provarlo).
 2. **Inventario (sinistra)**: trascina *Banco* e *Cattedra* nell'aula. I banchi messi uno accanto all'altro
    si **uniscono** in un unico gruppo. Ci sono anche disposizioni rapide (file a coppie, file da 3, isole da 4, ferro di cavallo).
    - doppio clic su una casella vuota → aggiungi un banco
@@ -41,47 +46,54 @@ con *Stampa* ottieni la piantina: tutta la disposizione dei banchi, con i nomi, 
 
 ## Analytics e Speed Insights (Vercel)
 
-L'app usa **Vercel Web Analytics** (visite) e **Speed Insights** (velocità reale: LCP, INP, CLS, FCP, TTFB)
-nel modo previsto per i siti statici, senza npm (`js/analytics.js`): le code `window.va` e `window.si` create subito
-e gli script `/_vercel/insights/script.js` e `/_vercel/speed-insights/script.js` caricati con `defer`.
+In `app/layout.jsx` ci sono i componenti ufficiali di Vercel per Next.js:
 
-Per attivarli:
-1. Fai il deploy della cartella su Vercel (nessun build: è un sito statico).
-2. Nella dashboard del progetto apri **Analytics → Enable** e **Speed Insights → Enable**.
-3. Rifai il deploy: Vercel crea le route `/_vercel/insights/*` e `/_vercel/speed-insights/*` e i dati iniziano
-   a comparire dopo qualche visita (Speed Insights misura i visitatori veri, quindi apri il sito e usalo un po').
+```jsx
+import { Analytics } from '@vercel/analytics/next';
+import { SpeedInsights } from '@vercel/speed-insights/next';
+// ...
+<body>
+  {children}
+  <Analytics />
+  <SpeedInsights />
+</body>
+```
 
-- Su `localhost` vengono caricati gli script di debug (scrivono in console, non inviano nulla); aprendo `index.html`
-  come file non viene caricato niente.
-- Il pacchetto npm `@vercel/speed-insights` della schermata "Get Started" di Vercel serve solo ai progetti con
-  bundler (Next.js, Vite…): qui fa la stessa cosa lo script, senza dipendenze.
-- Eventi personalizzati: *Genera disposizione* (numero di studenti, banchi, regole, violazioni), *Regola aggiunta* (tipo),
+- **Web Analytics** conta le visite; **Speed Insights** misura la velocità reale (LCP, INP, CLS, FCP, TTFB).
+- In sviluppo (`npm run dev`) caricano gli script di debug, che scrivono in console e non inviano nulla.
+- Eventi personalizzati con `track()` di `@vercel/analytics` (passato all'app in `app/ClassroomScripts.jsx`):
+  *Genera disposizione* (numero di studenti, banchi, regole, violazioni), *Regola aggiunta* (tipo),
   *Disposizione rapida* (tipo), *Stampa*, *Esporta*, *Importa*. Contengono solo numeri e tipi, **mai i nomi degli studenti**.
   Nella dashboard gli eventi personalizzati si vedono con i piani Pro/Enterprise; le visite in tutti i piani.
 
+Per attivarli:
+1. Importa il repository su Vercel: riconosce Next.js da solo (build `next build`).
+2. Nella dashboard del progetto apri **Analytics → Enable** e **Speed Insights → Enable**.
+3. Rifai il deploy e visita il sito: i dati compaiono dopo le prime visite.
+
 ## Font e icone
 
-- Il font del logo è **Della Respira** (SIL Open Font License, vedi `assets/fonts/OFL.txt`), incluso in locale e usato in tutta l'app.
-- Le icone sono SVG lineari (stile Lucide) definite una volta in `index.html` e riusate con `<use href="#i-...">`.
+- Il font del logo è **Della Respira** (SIL Open Font License, vedi `public/assets/fonts/OFL.txt`), incluso in locale e usato in tutta l'app.
+- Le icone sono SVG lineari (stile Lucide) definite una volta in `app/page.jsx` e riusate con `<use href="#i-...">`.
 
 ## Test
 
 ```bash
 npm test          # algoritmo (Union-Find, geometria, simulated annealing)
-npm run test:e2e  # tutta l'app nel browser (richiede Playwright)
+npm run test:e2e  # build + tutta l'app nel browser, compresi Analytics e Speed Insights (richiede Playwright)
 ```
 
 ## Struttura
 
 ```
-index.html          pagina
-css/style.css       stile
-js/unionfind.js     Union-Find
-js/solver.js        geometria dell'aula + algoritmo
-js/app.js           interfaccia, drag & drop, regole
-js/analytics.js     Vercel Web Analytics + Speed Insights + eventi
-tests/              test dell'algoritmo (node --test) e dell'app nel browser (e2e.js)
-assets/logo.png     logo
-assets/favicon*.png favicon (monogramma Rd)
-assets/fonts/       font Della Respira + licenza
+app/layout.jsx            layout di Next.js: metadati, favicon, <Analytics />, <SpeedInsights />
+app/page.jsx              la pagina (inventario, aula, studenti, regole)
+app/ClassroomScripts.jsx  avvia la logica dell'app dopo l'idratazione e le passa track()
+app/globals.css           stile
+public/js/unionfind.js    Union-Find
+public/js/solver.js       geometria dell'aula + algoritmo
+public/js/app.js          interfaccia, drag & drop, regole, stampa
+public/assets/            logo, favicon, font Della Respira + licenza
+tests/                    test dell'algoritmo (node --test) e dell'app nel browser (e2e.js)
+next.config.mjs           export statico (out/)
 ```
