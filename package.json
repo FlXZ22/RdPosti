@@ -4,7 +4,8 @@
   "description": "Disposizione intelligente dei posti in classe",
   "private": true,
   "scripts": {
-    "test": "node --test tests/solver.test.js"
+    "test": "node --test tests/solver.test.js",
+    "test:e2e": "node tests/e2e.js"
   },
   "license": "MIT"
 }
