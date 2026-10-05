@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/logo.png" alt="RdPosti" height="70"></p>
+<p align="center"><img src="public/assets/logo.png" alt="RdPosti" height="70"></p>
 
 **RdPosti** è un'app web (Next.js + JavaScript) per creare la disposizione dei posti in classe
 evitando di mettere vicine le persone incompatibili.
@@ -34,9 +34,9 @@ con *Stampa* ottieni la piantina: tutta la disposizione dei banchi, con i nomi, 
 
 ## Come funziona l'algoritmo
 
-- **Union-Find** (`js/unionfind.js`): ogni banco è un insieme; se due banchi sono adiacenti (sopra/sotto/destra/sinistra)
+- **Union-Find** (`public/js/unionfind.js`): ogni banco è un insieme; se due banchi sono adiacenti (sopra/sotto/destra/sinistra)
   i loro insiemi vengono uniti. Così si scoprono i gruppi di banchi attaccati.
-- **Geometria** (`buildLayout` in `js/solver.js`): per ogni coppia di posti calcola se sono *accanto*, *davanti/dietro*,
+- **Geometria** (`buildLayout` in `public/js/solver.js`): per ogni coppia di posti calcola se sono *accanto*, *davanti/dietro*,
   in *diagonale* o *nello stesso gruppo*. Le file sono ordinate partendo da quella più vicina alla cattedra
   (se la cattedra è in basso, la prima fila è in basso).
 - **Simulated annealing** (`solve`): parte da una permutazione casuale degli studenti e prova a scambiare due posti alla
@@ -67,7 +67,9 @@ import { SpeedInsights } from '@vercel/speed-insights/next';
   Nella dashboard gli eventi personalizzati si vedono con i piani Pro/Enterprise; le visite in tutti i piani.
 
 Per attivarli:
-1. Importa il repository su Vercel: riconosce Next.js da solo (build `next build`).
+1. Importa il repository su Vercel. `vercel.json` imposta il preset **Next.js** (`"framework": "nextjs"`):
+   senza, un progetto creato quando RdPosti era HTML statico resterebbe sul preset *Other*, che pubblica la
+   cartella `public/` (senza `index.html`) e dà **404 NOT_FOUND**.
 2. Nella dashboard del progetto apri **Analytics → Enable** e **Speed Insights → Enable**.
 3. Rifai il deploy e visita il sito: i dati compaiono dopo le prime visite.
 
