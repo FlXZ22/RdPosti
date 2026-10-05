@@ -11,14 +11,19 @@ evitando di mettere vicine le persone incompatibili.
    - doppio clic su una casella vuota → aggiungi un banco
    - doppio clic su un oggetto, oppure trascinarlo fuori dall'aula → rimuovilo
    - clic destro sulla cattedra → ruotala
+   - **selezione multipla**: trascina su una zona vuota per disegnare un rettangolo di selezione
+     (oppure Shift/Ctrl + clic, Ctrl+A per tutto). Poi trascina un oggetto selezionato per spostarli tutti insieme,
+     usa le frecce per muoverli di una casella, Canc (o *Elimina*) per toglierli, Esc per deselezionare
 3. **Studenti (destra)**: scrivi `Nome Cognome, Nome Cognome, ...`: la tabella si compila da sola.
 4. **Regole (in basso, clic sull'icona)**: scegli chi *non deve stare vicino* a chi, chi deve stare vicino,
-   chi va in prima/ultima fila (o non ci deve andare).
+   chi va in prima/ultima fila (o non ci deve andare). Ogni tipo di regola ha il suo colore
+   (rosso lontani, verde vicini, blu prima fila, ottanio no prima fila, viola ultima fila, arancio no ultima fila).
 5. Premi **Genera disposizione**. Ogni volta esce una disposizione casuale diversa che rispetta le regole.
    Clicca due banchi per scambiare a mano due studenti: le regole vengono ricontrollate subito.
 
 Tutto viene salvato automaticamente nel browser. Con *Esporta*/*Importa* puoi passare la classe a un altro computer,
-con *Stampa* ottieni la piantina.
+con *Stampa* ottieni la piantina: tutta la disposizione dei banchi, con i nomi, sempre in **una sola pagina**
+(orientamento verticale od orizzontale scelto in automatico).
 
 ## Come funziona l'algoritmo
 

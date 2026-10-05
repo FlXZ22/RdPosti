@@ -87,7 +87,13 @@
           <span>I banchi vicini si uniscono · doppio clic per aggiungere un banco</span>
         </div>
       </div>
-      <p class="room-caption">Trascina per spostare · trascina fuori o doppio clic per rimuovere · clicca due banchi per scambiare</p>
+      <p class="room-caption" id="roomCaption">Trascina per spostare · trascina sul vuoto per selezionarne più di uno · trascina fuori o Canc per rimuovere</p>
+      <div class="sel-bar" id="selBar" hidden>
+        <span id="selCount"></span>
+        <span class="sel-hint">trascina per spostarli · frecce per muoverli di una casella</span>
+        <button class="btn danger" id="selDelete"><svg class="ic sm"><use href="#i-trash"/></svg>Elimina</button>
+        <button class="icon-btn" id="selClear" title="Deseleziona (Esc)" aria-label="Deseleziona"><svg class="ic sm"><use href="#i-x"/></svg></button>
+      </div>
     </section>
 
     <!-- STUDENTI -->
@@ -140,6 +146,7 @@
   </section>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="print-sheet" id="printSheet" aria-hidden="true"></div>
 
   <script src="js/unionfind.js"></script>
   <script src="js/solver.js"></script>
