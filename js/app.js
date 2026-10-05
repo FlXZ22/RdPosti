@@ -175,6 +175,7 @@
     renderNames(d);
     renderRules(d);
     renderViolations(d);
+    renderSelectionBar();
     save();
   }
 
@@ -232,6 +233,7 @@
         }
         if (selectedDesk === it.id) node.classList.add('selected');
       }
+      if (picked.has(it.id)) node.classList.add('picked');
       gridEl.appendChild(node);
     }
   }
@@ -306,15 +308,16 @@
     for (const r of state.rules) {
       const t = RULE_TYPES[r.type];
       const li = el('li');
+      li.dataset.rule = r.type;
       if (!activeSet.has(r)) {
         li.classList.add('inactive');
         li.title = 'Uno degli studenti non è più nella lista: regola ignorata';
       } else if (brokenSet.has(r)) li.classList.add('broken');
       li.appendChild(icon(t.icon));
-      const txt = el('span');
-      txt.appendChild(document.createTextNode(t.pair ? `${r.a} e ${r.b} ` : `${r.a} `));
-      txt.appendChild(el('span', 'muted', t.label.toLowerCase()));
-      li.appendChild(txt);
+      li.appendChild(el('span', 'names', t.pair ? `${r.a} e ${r.b}` : r.a));
+      const tag = el('span', 'tag', t.short);
+      tag.title = t.label;
+      li.appendChild(tag);
       const del = el('button', 'icon-btn del');
       del.appendChild(icon('x', 'sm'));
       del.title = 'Elimina regola';
@@ -355,7 +358,8 @@
     }
     for (const v of d.ev.violations) {
       const li = el('li', v.severe ? 'severe' : 'warn');
-      li.append(icon('alert'), v.text);
+      li.dataset.rule = v.rule.type;
+      li.append(el('span', 'dot'), v.text);
       ul.appendChild(li);
     }
   }
@@ -369,7 +373,60 @@
   function removeItem(id) {
     state.items = state.items.filter((it) => it.id !== id);
     delete state.assign[id];
+    picked.delete(id);
     if (selectedDesk === id) selectedDesk = null;
+  }
+
+  // ---------------------------------------------------------------- Selezione multipla
+  const picked = new Set(); // oggetti selezionati col rettangolo / Shift+clic
+
+  function setPicked(ids) {
+    picked.clear();
+    ids.forEach((id) => picked.add(id));
+  }
+
+  function removeItems(ids) {
+    const n = ids.length;
+    ids.forEach(removeItem);
+    picked.clear();
+    if (n) toast(n === 1 ? 'Oggetto rimosso' : `${n} oggetti rimossi`);
+  }
+
+  /** Sposta un gruppo di oggetti di (dc, dr) celle; false se non c'è spazio. */
+  function canMoveGroup(ids, dc, dr) {
+    const moving = new Set(ids);
+    return ids.every((id) => {
+      const it = state.items.find((x) => x.id === id);
+      if (!it) return false;
+      const c = it.c + dc, r = it.r + dr;
+      if (c < 0 || r < 0 || c + it.w > state.cols || r + it.h > state.rows) return false;
+      return !state.items.some((o) => !moving.has(o.id) && c < o.c + o.w && o.c < c + it.w && r < o.r + o.h && o.r < r + it.h);
+    });
+  }
+
+  function moveGroup(ids, dc, dr) {
+    ids.forEach((id) => {
+      const it = state.items.find((x) => x.id === id);
+      it.c += dc;
+      it.r += dr;
+    });
+  }
+
+  /** Aggiorna solo le classi di selezione, senza ricostruire l'aula. */
+  function refreshMarks() {
+    gridEl.querySelectorAll('.item').forEach((n) => {
+      n.classList.toggle('picked', picked.has(n.dataset.id));
+      n.classList.toggle('selected', selectedDesk === n.dataset.id);
+    });
+    renderSelectionBar();
+  }
+
+  function renderSelectionBar() {
+    const bar = $('#selBar');
+    const n = picked.size;
+    bar.hidden = n === 0;
+    $('#roomCaption').hidden = n > 0;
+    $('#selCount').textContent = n === 1 ? '1 selezionato' : `${n} selezionati`;
   }
 
   // ---------------------------------------------------------------- Drag & drop (pointer events)
@@ -384,60 +441,105 @@
     window.addEventListener('pointercancel', cancelDrag);
   }
 
-  function activateDrag(e) {
+  function activateDrag() {
     drag.active = true;
-    const w = drag.w * cell, h = drag.h * cell;
-    const ghost = el('div', 'item drag-ghost ' + drag.type);
-    if (drag.type === 'desk') ghost.classList.add('desk');
-    else ghost.textContent = 'Cattedra';
-    Object.assign(ghost.style, { width: w - 8 + 'px', height: h - 8 + 'px' });
-    document.body.appendChild(ghost);
-    drag.ghost = ghost;
-    if (drag.srcEl) {
-      // mantieni il punto di presa sull'oggetto
-      const rect = drag.srcEl.getBoundingClientRect();
-      drag.offX = drag.startX - rect.left;
-      drag.offY = drag.startY - rect.top;
-      drag.srcEl.classList.add('dragging-src');
-    } else {
+    if (drag.kind === 'new') {
+      const w = drag.w * cell, h = drag.h * cell;
+      const ghost = el('div', 'item drag-ghost ' + drag.type);
+      if (drag.type === 'teacher') ghost.textContent = 'Cattedra';
+      Object.assign(ghost.style, { width: w - 8 + 'px', height: h - 8 + 'px' });
+      document.body.appendChild(ghost);
+      drag.ghost = ghost;
       drag.offX = (w - 8) / 2;
       drag.offY = (h - 8) / 2;
+      drag.previews = [el('div', 'drop-preview')];
+    } else if (drag.kind === 'move') {
+      drag.nodes = drag.ids.map((id) => gridEl.querySelector(`.item[data-id="${id}"]`)).filter(Boolean);
+      drag.nodes.forEach((n) => n.classList.add('moving'));
+      drag.previews = drag.ids.map(() => el('div', 'drop-preview'));
+    } else if (drag.kind === 'marquee') {
+      drag.box = el('div', 'marquee');
+      gridEl.appendChild(drag.box);
+      drag.base = drag.additive ? new Set(picked) : new Set();
+      return;
     }
-    drag.preview = el('div', 'drop-preview');
-    gridEl.appendChild(drag.preview);
+    drag.previews.forEach((p) => gridEl.appendChild(p));
   }
 
-  function dropTarget(e) {
-    const roomRect = roomEl.getBoundingClientRect();
-    const inside = e.clientX >= roomRect.left && e.clientX <= roomRect.right && e.clientY >= roomRect.top && e.clientY <= roomRect.bottom;
+  function insideRoom(e) {
+    const r = roomEl.getBoundingClientRect();
+    return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+  }
+
+  function newTarget(e) {
     const g = gridEl.getBoundingClientRect();
-    const x = e.clientX - drag.offX - g.left;
-    const y = e.clientY - drag.offY - g.top;
-    const c = Math.round(x / cell);
-    const r = Math.round(y / cell);
-    return { inside, c, r, valid: inside && canPlace(drag.w, drag.h, c, r, drag.id) };
+    const c = Math.round((e.clientX - drag.offX - g.left) / cell);
+    const r = Math.round((e.clientY - drag.offY - g.top) / cell);
+    const inside = insideRoom(e);
+    return { inside, c, r, valid: inside && canPlace(drag.w, drag.h, c, r, null) };
+  }
+
+  function moveTarget(e) {
+    const dx = e.clientX - drag.startX, dy = e.clientY - drag.startY;
+    const dc = Math.round(dx / cell), dr = Math.round(dy / cell);
+    const inside = insideRoom(e);
+    return { inside, dx, dy, dc, dr, valid: inside && canMoveGroup(drag.ids, dc, dr) };
+  }
+
+  function gridPoint(e) {
+    const g = gridEl.getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.min(g.width, e.clientX - g.left)),
+      y: Math.max(0, Math.min(g.height, e.clientY - g.top)),
+    };
   }
 
   function onPointerMove(e) {
     if (!drag || e.pointerId !== drag.pointerId) return;
     if (!drag.active) {
       if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < DRAG_THRESHOLD) return;
-      activateDrag(e);
+      activateDrag();
     }
-    drag.ghost.style.left = e.clientX - drag.offX + 'px';
-    drag.ghost.style.top = e.clientY - drag.offY + 'px';
-    const t = dropTarget(e);
-    const p = drag.preview;
-    if (t.inside) {
-      p.style.display = '';
+
+    if (drag.kind === 'marquee') {
+      const a = drag.origin, b = gridPoint(e);
+      const box = { left: Math.min(a.x, b.x), top: Math.min(a.y, b.y), width: Math.abs(a.x - b.x), height: Math.abs(a.y - b.y) };
+      Object.assign(drag.box.style, px(box));
+      const hit = state.items.filter((it) => {
+        const ib = itemBox(it);
+        return ib.left < box.left + box.width && box.left < ib.left + ib.width && ib.top < box.top + box.height && box.top < ib.top + ib.height;
+      });
+      setPicked([...drag.base, ...hit.map((it) => it.id)]);
+      refreshMarks();
+      return;
+    }
+
+    if (drag.kind === 'new') {
+      drag.ghost.style.left = e.clientX - drag.offX + 'px';
+      drag.ghost.style.top = e.clientY - drag.offY + 'px';
+      const t = newTarget(e);
+      const p = drag.previews[0];
+      p.style.display = t.inside ? '' : 'none';
       const cc = Math.max(0, Math.min(state.cols - drag.w, t.c));
       const rr = Math.max(0, Math.min(state.rows - drag.h, t.r));
       Object.assign(p.style, px(itemBox({ c: cc, r: rr, w: drag.w, h: drag.h })));
       p.classList.toggle('invalid', !t.valid);
-    } else {
-      p.style.display = 'none';
+      return;
     }
-    drag.ghost.style.opacity = !t.inside && drag.kind === 'move' ? '.4' : '.85';
+
+    // spostamento (uno o più oggetti)
+    const t = moveTarget(e);
+    drag.nodes.forEach((n) => {
+      n.style.transform = `translate(${t.dx}px, ${t.dy}px)`;
+      n.classList.toggle('leaving', !t.inside);
+    });
+    drag.ids.forEach((id, i) => {
+      const it = state.items.find((x) => x.id === id);
+      const p = drag.previews[i];
+      p.style.display = t.inside ? '' : 'none';
+      Object.assign(p.style, px(itemBox({ c: it.c + t.dc, r: it.r + t.dr, w: it.w, h: it.h })));
+      p.classList.toggle('invalid', !t.valid);
+    });
   }
 
   function onPointerUp(e) {
@@ -445,32 +547,42 @@
     const d = drag;
     if (!d.active) {
       cleanupDrag();
-      if (d.kind === 'move' && d.type === 'desk') onDeskClick(d.id);
+      if (d.kind === 'marquee') {
+        // clic su una zona vuota: deseleziona tutto
+        if (picked.size || selectedDesk) { picked.clear(); selectedDesk = null; refreshMarks(); }
+      } else if (d.kind === 'move') onItemClick(d.clickId, d.additive);
       return;
     }
-    const t = dropTarget(e);
-    cleanupDrag();
+    if (d.kind === 'marquee') {
+      cleanupDrag();
+      refreshMarks();
+      return;
+    }
     if (d.kind === 'new') {
+      const t = newTarget(e);
+      cleanupDrag();
       if (t.valid) state.items.push({ id: uid(), type: d.type, c: t.c, r: t.r, w: d.w, h: d.h });
       else if (t.inside) toast('Lì non c’è spazio');
-    } else {
-      const it = state.items.find((x) => x.id === d.id);
-      if (!t.inside) {
-        removeItem(d.id);
-        toast(d.type === 'desk' ? 'Banco rimosso' : 'Cattedra rimossa');
-      } else if (t.valid && it) {
-        it.c = t.c;
-        it.r = t.r;
-      }
+      render();
+      return;
     }
+    const t = moveTarget(e);
+    cleanupDrag();
+    if (!t.inside) removeItems(d.ids);
+    else if (t.valid) moveGroup(d.ids, t.dc, t.dr);
+    else toast('Lì non c’è spazio');
     render();
   }
 
   function cleanupDrag() {
     if (!drag) return;
     if (drag.ghost) drag.ghost.remove();
-    if (drag.preview) drag.preview.remove();
-    if (drag.srcEl) drag.srcEl.classList.remove('dragging-src');
+    if (drag.box) drag.box.remove();
+    (drag.previews || []).forEach((p) => p.remove());
+    (drag.nodes || []).forEach((n) => {
+      n.style.transform = '';
+      n.classList.remove('moving', 'leaving');
+    });
     window.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', onPointerUp);
     window.removeEventListener('pointercancel', cancelDrag);
@@ -485,23 +597,30 @@
   document.querySelectorAll('.inv-item').forEach((node) => {
     node.addEventListener('pointerdown', (e) => {
       const type = node.dataset.type;
-      beginPointer(e, { kind: 'new', type, id: null, ...SIZES[type] });
+      beginPointer(e, { kind: 'new', type, ...SIZES[type] });
     });
   });
 
-  // Oggetti nell'aula
-  gridEl.addEventListener('pointerdown', (e) => {
+  // Aula: oggetto → sposta (o clic); zona vuota → rettangolo di selezione
+  roomEl.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    const additive = e.shiftKey || e.ctrlKey || e.metaKey;
     const node = e.target.closest('.item');
-    if (!node || node.classList.contains('drag-ghost')) return;
-    const it = state.items.find((x) => x.id === node.dataset.id);
-    if (!it) return;
-    beginPointer(e, { kind: 'move', type: it.type, id: it.id, w: it.w, h: it.h, srcEl: node });
+    if (node && gridEl.contains(node)) {
+      const id = node.dataset.id;
+      // trascinando un oggetto selezionato si sposta tutta la selezione
+      const ids = picked.has(id) ? [...picked] : [id];
+      beginPointer(e, { kind: 'move', ids, clickId: id, additive });
+      return;
+    }
+    beginPointer(e, { kind: 'marquee', origin: gridPoint(e), additive });
   });
 
   gridEl.addEventListener('dblclick', (e) => {
     const node = e.target.closest('.item');
     if (node) {
       removeItem(node.dataset.id);
+      picked.delete(node.dataset.id);
       selectedDesk = null;
       render();
       return;
@@ -526,24 +645,68 @@
     } else toast('Non c’è spazio per ruotare la cattedra');
   });
 
-  // Scambio manuale: clic su due banchi
-  function onDeskClick(id) {
-    if (!Object.keys(state.assign).length) return;
-    if (!selectedDesk) {
-      selectedDesk = id;
-    } else if (selectedDesk === id) {
+  /**
+   * Clic su un oggetto.
+   * - Shift/Ctrl: aggiunge o toglie dalla selezione
+   * - con i nomi assegnati: due clic su due banchi scambiano gli studenti
+   * - altrimenti: seleziona solo quell'oggetto
+   */
+  function onItemClick(id, additive) {
+    const it = state.items.find((x) => x.id === id);
+    if (!it) return;
+    if (additive) {
+      if (picked.has(id)) picked.delete(id);
+      else picked.add(id);
       selectedDesk = null;
+    } else if (it.type === 'desk' && Object.keys(state.assign).length) {
+      picked.clear();
+      if (!selectedDesk) selectedDesk = id;
+      else if (selectedDesk === id) selectedDesk = null;
+      else {
+        const a = state.assign[selectedDesk], b = state.assign[id];
+        delete state.assign[selectedDesk];
+        delete state.assign[id];
+        if (a) state.assign[id] = a;
+        if (b) state.assign[selectedDesk] = b;
+        selectedDesk = null;
+        toast('Posti scambiati');
+        render();
+        return;
+      }
     } else {
-      const a = state.assign[selectedDesk], b = state.assign[id];
-      delete state.assign[selectedDesk];
-      delete state.assign[id];
-      if (a) state.assign[id] = a;
-      if (b) state.assign[selectedDesk] = b;
-      selectedDesk = null;
-      toast('Posti scambiati');
+      setPicked(picked.size === 1 && picked.has(id) ? [] : [id]);
     }
-    render();
+    refreshMarks();
   }
+
+  // Barra della selezione
+  $('#selDelete').addEventListener('click', () => { removeItems([...picked]); render(); });
+  $('#selClear').addEventListener('click', () => { picked.clear(); refreshMarks(); });
+
+  // Tastiera: Canc elimina, frecce spostano, Ctrl+A seleziona tutto, Esc annulla
+  window.addEventListener('keydown', (e) => {
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName);
+    if (e.key === 'Escape') {
+      if (drag) { cancelDrag(); return; }
+      if (picked.size || selectedDesk) { picked.clear(); selectedDesk = null; refreshMarks(); }
+      return;
+    }
+    if (typing) return;
+    if ((e.key === 'Delete' || e.key === 'Backspace') && picked.size) {
+      e.preventDefault();
+      removeItems([...picked]);
+      render();
+    } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a' && state.items.length) {
+      e.preventDefault();
+      setPicked(state.items.map((it) => it.id));
+      refreshMarks();
+    } else if (picked.size && e.key.startsWith('Arrow')) {
+      e.preventDefault();
+      const [dc, dr] = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+      const ids = [...picked];
+      if (canMoveGroup(ids, dc, dr)) { moveGroup(ids, dc, dr); render(); }
+    }
+  });
 
   // ---------------------------------------------------------------- Nomi e generazione
   const namesInput = $('#namesInput');
@@ -590,6 +753,7 @@
     const b = el('button', 'type-opt');
     b.type = 'button';
     b.dataset.type = key;
+    b.dataset.rule = key;
     b.setAttribute('role', 'radio');
     b.title = t.label;
     b.append(icon(t.icon, 'sm'), t.short);
@@ -694,7 +858,129 @@
     }
   });
 
-  $('#btnPrint').addEventListener('click', () => window.print());
+  // ---------------------------------------------------------------- Stampa su UNA pagina
+  /*
+   * Disegna l'aula in un SVG ritagliato sui soli banchi: l'SVG si scala da solo
+   * per riempire la pagina, quindi tutta la disposizione sta sempre in un foglio.
+   */
+  const measureCtx = document.createElement('canvas').getContext('2d');
+
+  function fitText(text, maxW, maxSize, minSize) {
+    let size = maxSize;
+    const fontOf = (sz) => `${sz}px 'Della Respira', 'Times New Roman', serif`;
+    measureCtx.font = fontOf(size);
+    while (size > minSize && measureCtx.measureText(text).width > maxW) {
+      size -= 1;
+      measureCtx.font = fontOf(size);
+    }
+    let t = text;
+    while (t.length > 1 && measureCtx.measureText(t).width > maxW) t = t.slice(0, -2) + '…';
+    return { text: t, size };
+  }
+
+  function roundedPath(x, y, w, h, [tl, tr, br, bl]) {
+    return `M${x + tl},${y}H${x + w - tr}Q${x + w},${y} ${x + w},${y + tr}V${y + h - br}Q${x + w},${y + h} ${x + w - br},${y + h}` +
+      `H${x + bl}Q${x},${y + h} ${x},${y + h - bl}V${y + tl}Q${x},${y} ${x + tl},${y}Z`;
+  }
+
+  function buildPrintSheet() {
+    const sheet = $('#printSheet');
+    sheet.textContent = '';
+    const d = derive();
+    const U = 100, G = 6, R = 12;
+
+    const head = el('div', 'print-head');
+    const logo = el('img');
+    logo.src = 'assets/logo.png';
+    logo.alt = 'RdPosti';
+    head.appendChild(logo);
+    const nAssigned = d.pos.filter((p) => p >= 0).length;
+    head.appendChild(el('span', null,
+      `Disposizione dei posti · ${new Date().toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}` +
+      (nAssigned ? ` · ${nAssigned} studenti` : '')));
+    sheet.appendChild(head);
+
+    if (!state.items.length) return 'landscape';
+
+    const minC = Math.min(...state.items.map((it) => it.c));
+    const minR = Math.min(...state.items.map((it) => it.r));
+    const maxC = Math.max(...state.items.map((it) => it.c + it.w));
+    const maxR = Math.max(...state.items.map((it) => it.r + it.h));
+    const pad = U * 0.4;
+    const vx = minC * U - pad, vy = minR * U - pad;
+    const vw = (maxC - minC) * U + pad * 2, vh = (maxR - minR) * U + pad * 2;
+
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', `${vx} ${vy} ${vw} ${vh}`);
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    svg.setAttribute('font-family', "'Della Respira', 'Times New Roman', serif");
+    const add = (tag, attrs, text) => {
+      const n = document.createElementNS(SVG_NS, tag);
+      for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+      if (text != null) n.textContent = text;
+      svg.appendChild(n);
+      return n;
+    };
+    // perimetro dell'aula
+    add('rect', { x: vx + 2, y: vy + 2, width: vw - 4, height: vh - 4, rx: 28, fill: 'none', stroke: '#c8ccd2', 'stroke-width': 2 });
+
+    const studentAt = new Map();
+    d.pos.forEach((seat, si) => { if (seat >= 0) studentAt.set(d.layout.seats[seat].id, d.students[si]); });
+    const seatById = new Map(d.layout.seats.map((s) => [s.id, s]));
+
+    for (const it of state.items) {
+      if (it.type === 'teacher') {
+        const x = it.c * U + G, y = it.r * U + G, w = it.w * U - 2 * G, h = it.h * U - 2 * G;
+        add('rect', { x, y, width: w, height: h, rx: R, fill: '#16181d' });
+        add('text', { x: x + w / 2, y: y + h / 2, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: '#fff', 'font-size': 26 }, 'Cattedra');
+        continue;
+      }
+      const seat = seatById.get(it.id);
+      const j = seat.join;
+      const x = it.c * U + (j.l ? 0 : G), y = it.r * U + (j.t ? 0 : G);
+      const w = U - (j.l ? 0 : G) - (j.r ? 0 : G), h = U - (j.t ? 0 : G) - (j.b ? 0 : G);
+      const radii = [!j.l && !j.t, !j.r && !j.t, !j.r && !j.b, !j.l && !j.b].map((on) => (on ? R : 0));
+      add('path', { d: roundedPath(x, y, w, h, radii), fill: '#fff', stroke: '#16181d', 'stroke-width': 2.5 });
+      // lato in comune con un banco vicino: niente bordo pieno, solo una linea tratteggiata
+      const e = 1.3; // metà spessore del bordo esterno
+      const y1 = y + (j.t ? 0 : e), y2 = y + h - (j.b ? 0 : e);
+      const x1 = x + (j.l ? 0 : e), x2 = x + w - (j.r ? 0 : e);
+      if (j.l) add('line', { x1: x, y1, x2: x, y2, stroke: '#fff', 'stroke-width': 3.5 });
+      if (j.t) add('line', { x1, y1: y, x2, y2: y, stroke: '#fff', 'stroke-width': 3.5 });
+      if (j.l) add('line', { x1: x, y1: y + 8, x2: x, y2: y + h - 8, stroke: '#b9bec6', 'stroke-width': 1.5, 'stroke-dasharray': '5 5' });
+      if (j.t) add('line', { x1: x + 8, y1: y, x2: x + w - 8, y2: y, stroke: '#b9bec6', 'stroke-width': 1.5, 'stroke-dasharray': '5 5' });
+      add('text', { x: x + 9, y: y + 20, 'font-size': 15, fill: '#9ca3af' }, d.seatNumber.get(it.id));
+      const st = studentAt.get(it.id);
+      if (st) {
+        const maxW = w - 14;
+        const nm = fitText(st.nome, maxW, 24, 12);
+        add('text', { x: x + w / 2, y: y + h / 2 + (st.cognome ? 6 : 12), 'text-anchor': 'middle', 'font-size': nm.size, fill: '#16181d' }, nm.text);
+        if (st.cognome) {
+          const sn = fitText(st.cognome, maxW, 18, 10);
+          add('text', { x: x + w / 2, y: y + h / 2 + 30, 'text-anchor': 'middle', 'font-size': sn.size, fill: '#6b7280' }, sn.text);
+        }
+      }
+    }
+    sheet.appendChild(svg);
+    return vw >= vh ? 'landscape' : 'portrait';
+  }
+
+  function preparePrint() {
+    const orientation = buildPrintSheet();
+    let st = $('#pageStyle');
+    if (!st) {
+      st = el('style');
+      st.id = 'pageStyle';
+      document.head.appendChild(st);
+    }
+    st.textContent = `@page { size: A4 ${orientation}; margin: 12mm; }`;
+  }
+
+  window.addEventListener('beforeprint', preparePrint);
+  $('#btnPrint').addEventListener('click', () => {
+    preparePrint();
+    window.print();
+  });
 
   // ---------------------------------------------------------------- Varie
   let toastTimer = null;
@@ -705,13 +991,6 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
   }
-
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      cancelDrag();
-      if (selectedDesk) { selectedDesk = null; render(); }
-    }
-  });
 
   let resizeTimer = null;
   window.addEventListener('resize', () => {
