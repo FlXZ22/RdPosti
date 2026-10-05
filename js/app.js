@@ -83,7 +83,15 @@
     const teacherC = Math.max(0, Math.floor((cols - 3) / 2));
     if (name !== 'clear') items.push({ id: uid(), type: 'teacher', c: teacherC, r: 0, w: 3, h: 1 });
 
-    if (name === 'pairs') {
+    if (name === 'triples') {
+      // due colonne di banchi da 3 con un corridoio largo in mezzo, 4 file
+      const left = 1, right = cols - 4;
+      for (let k = 0, r = 2; k < 4 && r < rows; k++, r += 2)
+        for (let i = 0; i < 3; i++) {
+          desk(left + i, r);
+          if (right >= left + 4) desk(right + i, r);
+        }
+    } else if (name === 'pairs') {
       const blocks = Math.min(3, Math.floor((cols + 2) / 4));
       const width = blocks * 2 + (blocks - 1) * 2;
       const start = Math.floor((cols - width) / 2);
@@ -421,6 +429,42 @@
     renderSelectionBar();
   }
 
+  /**
+   * Duplica gli oggetti e mette le copie nel posto libero più vicino,
+   * preferendo una casella di distacco (così le copie non si uniscono agli originali)
+   * e, a parità, sotto o a destra. Le copie restano selezionate.
+   */
+  function duplicateItems(ids) {
+    const src = ids.map((id) => state.items.find((x) => x.id === id)).filter(Boolean);
+    if (!src.length) return;
+    const occupied = (c, r) => state.items.some((o) => c >= o.c && c < o.c + o.w && r >= o.r && r < o.r + o.h);
+    const fits = (dc, dr) => src.every((it) => {
+      const c = it.c + dc, r = it.r + dr;
+      if (c < 0 || r < 0 || c + it.w > state.cols || r + it.h > state.rows) return false;
+      return !state.items.some((o) => c < o.c + o.w && o.c < c + it.w && r < o.r + o.h && o.r < r + it.h);
+    });
+    const touches = (dc, dr) => src.some((it) => {
+      const c = it.c + dc, r = it.r + dr;
+      for (let x = c; x < c + it.w; x++) if (occupied(x, r - 1) || occupied(x, r + it.h)) return true;
+      for (let y = r; y < r + it.h; y++) if (occupied(c - 1, y) || occupied(c + it.w, y)) return true;
+      return false;
+    });
+    let best = null;
+    for (let dr = -state.rows; dr <= state.rows; dr++)
+      for (let dc = -state.cols; dc <= state.cols; dc++) {
+        if ((dc === 0 && dr === 0) || !fits(dc, dr)) continue;
+        const score = Math.abs(dc) + Math.abs(dr) + (touches(dc, dr) ? 100 : 0) + (dr < 0 ? 0.3 : 0) + (dc < 0 ? 0.2 : 0) + (dr === 0 ? 0.1 : 0);
+        if (!best || score < best.score) best = { dc, dr, score };
+      }
+    if (!best) return toast('Non c\u2019è spazio per duplicare');
+    const copies = src.map((it) => ({ ...it, id: uid(), c: it.c + best.dc, r: it.r + best.dr }));
+    state.items.push(...copies);
+    setPicked(copies.map((it) => it.id));
+    selectedDesk = null;
+    toast(copies.length === 1 ? 'Oggetto duplicato' : `${copies.length} oggetti duplicati`);
+    render();
+  }
+
   function renderSelectionBar() {
     const bar = $('#selBar');
     const n = picked.size;
@@ -635,6 +679,13 @@
   });
 
   gridEl.addEventListener('contextmenu', (e) => {
+    const deskNode = e.target.closest('.item.desk');
+    if (deskNode) {
+      e.preventDefault();
+      const id = deskNode.dataset.id;
+      duplicateItems(picked.has(id) ? [...picked] : [id]);
+      return;
+    }
     const node = e.target.closest('.item.teacher');
     if (!node) return;
     e.preventDefault();
@@ -680,6 +731,7 @@
   }
 
   // Barra della selezione
+  $('#selDuplicate').addEventListener('click', () => duplicateItems([...picked]));
   $('#selDelete').addEventListener('click', () => { removeItems([...picked]); render(); });
   $('#selClear').addEventListener('click', () => { picked.clear(); refreshMarks(); });
 
@@ -696,6 +748,9 @@
       e.preventDefault();
       removeItems([...picked]);
       render();
+    } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd' && picked.size) {
+      e.preventDefault();
+      duplicateItems([...picked]);
     } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a' && state.items.length) {
       e.preventDefault();
       setPicked(state.items.map((it) => it.id));

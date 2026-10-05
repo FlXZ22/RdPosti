@@ -7,13 +7,15 @@ evitando di mettere vicine le persone incompatibili.
 
 1. Apri `index.html` nel browser (doppio clic sul file va benissimo).
 2. **Inventario (sinistra)**: trascina *Banco* e *Cattedra* nell'aula. I banchi messi uno accanto all'altro
-   si **uniscono** in un unico gruppo. Ci sono anche disposizioni rapide (file a coppie, isole da 4, ferro di cavallo).
+   si **uniscono** in un unico gruppo. Ci sono anche disposizioni rapide (file a coppie, file da 3, isole da 4, ferro di cavallo).
    - doppio clic su una casella vuota → aggiungi un banco
    - doppio clic su un oggetto, oppure trascinarlo fuori dall'aula → rimuovilo
    - clic destro sulla cattedra → ruotala
    - **selezione multipla**: trascina su una zona vuota per disegnare un rettangolo di selezione
      (oppure Shift/Ctrl + clic, Ctrl+A per tutto). Poi trascina un oggetto selezionato per spostarli tutti insieme,
      usa le frecce per muoverli di una casella, Canc (o *Elimina*) per toglierli, Esc per deselezionare
+   - **duplica**: *Duplica* o Ctrl+D sulla selezione, oppure clic destro su un banco. Le copie vanno nel posto
+     libero più vicino (con una casella di distacco, così non si uniscono agli altri banchi) e restano selezionate
 3. **Studenti (destra)**: scrivi `Nome Cognome, Nome Cognome, ...`: la tabella si compila da sola.
 4. **Regole (in basso, clic sull'icona)**: scegli chi *non deve stare vicino* a chi, chi deve stare vicino,
    chi va in prima/ultima fila (o non ci deve andare). Ogni tipo di regola ha il suo colore
@@ -45,7 +47,8 @@ con *Stampa* ottieni la piantina: tutta la disposizione dei banchi, con i nomi, 
 ## Test
 
 ```bash
-npm test
+npm test          # algoritmo (Union-Find, geometria, simulated annealing)
+npm run test:e2e  # tutta l'app nel browser (richiede Playwright)
 ```
 
 ## Struttura
@@ -56,7 +59,8 @@ css/style.css       stile
 js/unionfind.js     Union-Find
 js/solver.js        geometria dell'aula + algoritmo
 js/app.js           interfaccia, drag & drop, regole
-tests/              test dell'algoritmo (node --test)
+tests/              test dell'algoritmo (node --test) e dell'app nel browser (e2e.js)
 assets/logo.png     logo
+assets/favicon*.png favicon (monogramma Rd)
 assets/fonts/       font Della Respira + licenza
 ```

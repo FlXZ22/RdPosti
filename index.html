@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>RdPosti</title>
   <meta name="description" content="RdPosti: disponi i banchi dell'aula e genera i posti rispettando le incompatibilità." />
-  <link rel="icon" href="assets/logo.png" />
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/favicon.png" />
+  <link rel="apple-touch-icon" href="assets/favicon.png" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -30,6 +32,7 @@
       <symbol id="i-back" viewBox="0 0 24 24"><path d="M12 17V3M6 11l6 6 6-6M19 21H5"/></symbol>
       <symbol id="i-not-front" viewBox="0 0 24 24"><path d="M5 3h14M12 8v13M6 15l6 6 6-6"/></symbol>
       <symbol id="i-not-back" viewBox="0 0 24 24"><path d="M19 21H5M12 16V3M6 9l6-6 6 6"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
       <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
       <symbol id="i-eraser" viewBox="0 0 24 24"><path d="M7 21L3 17a2 2 0 0 1 0-2.8L13.2 4a2 2 0 0 1 2.8 0L21 9a2 2 0 0 1 0 2.8L11.8 21M22 21H7M5 11l9 9"/></symbol>
     </defs>
@@ -64,6 +67,7 @@
       <h3>Disposizioni</h3>
       <div class="presets">
         <button class="link-btn" data-preset="pairs">File a coppie</button>
+        <button class="link-btn" data-preset="triples">File da 3</button>
         <button class="link-btn" data-preset="islands">Isole da 4</button>
         <button class="link-btn" data-preset="horseshoe">Ferro di cavallo</button>
         <button class="link-btn muted" data-preset="clear"><svg class="ic sm"><use href="#i-trash"/></svg>Svuota</button>
@@ -87,10 +91,11 @@
           <span>I banchi vicini si uniscono · doppio clic per aggiungere un banco</span>
         </div>
       </div>
-      <p class="room-caption" id="roomCaption">Trascina per spostare · trascina sul vuoto per selezionarne più di uno · trascina fuori o Canc per rimuovere</p>
+      <p class="room-caption" id="roomCaption">Trascina per spostare · trascina sul vuoto per selezionare · clic destro su un banco per duplicarlo · Canc per rimuovere</p>
       <div class="sel-bar" id="selBar" hidden>
         <span id="selCount"></span>
-        <span class="sel-hint">trascina per spostarli · frecce per muoverli di una casella</span>
+        <span class="sel-hint">trascina per spostarli · frecce per muoverli · Ctrl+D duplica</span>
+        <button class="btn" id="selDuplicate" title="Duplica (Ctrl+D)"><svg class="ic sm"><use href="#i-copy"/></svg>Duplica</button>
         <button class="btn danger" id="selDelete"><svg class="ic sm"><use href="#i-trash"/></svg>Elimina</button>
         <button class="icon-btn" id="selClear" title="Deseleziona (Esc)" aria-label="Deseleziona"><svg class="ic sm"><use href="#i-x"/></svg></button>
       </div>
