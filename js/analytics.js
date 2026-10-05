@@ -1,62 +1,24 @@
 /*
- * Vercel Web Analytics per un sito statico (senza npm né bundler).
+ * Vercel Web Analytics using the official @vercel/analytics package.
  *
- * Fa le stesse cose di `inject()` di @vercel/analytics:
- * 1. crea subito la coda `window.va`, così gli eventi chiamati prima che lo script
- *    sia caricato non vanno persi;
- * 2. carica lo script con `defer`:
- *    - in produzione su Vercel: /_vercel/insights/script.js (la route la crea Vercel
- *      quando attivi Web Analytics nel progetto);
- *    - in locale (localhost): lo script di debug, che scrive in console e non invia nulla;
- *    - aperto come file (file://): niente, non c'è nessun server a cui inviare.
+ * This script imports and initializes Vercel Web Analytics using the inject() function
+ * from the official package, which:
+ * 1. Creates the window.va queue for tracking events
+ * 2. Loads the appropriate analytics script:
+ *    - In production on Vercel: /_vercel/insights/script.js
+ *    - In development (localhost): debug script that logs to console
  *
- * Privacy: gli eventi contengono solo numeri e tipi, mai nomi di studenti.
+ * Privacy: events contain only numbers and types, never student names.
  */
-(function () {
-  'use strict';
 
-  window.va = window.va || function () {
-    (window.vaq = window.vaq || []).push(arguments);
-  };
+import { inject, track } from '../node_modules/@vercel/analytics/dist/index.mjs';
 
-  const { protocol, hostname } = window.location;
-  const isWeb = protocol === 'http:' || protocol === 'https:';
-  const isLocal = /^(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)$/.test(hostname) || hostname.endsWith('.local');
+// Initialize Vercel Web Analytics
+inject({
+  mode: 'auto', // automatically detects development vs production
+  debug: true   // enables debug logging in development
+});
 
-  if (isWeb) {
-    const src = isLocal ? 'https://va.vercel-scripts.com/v1/script.debug.js' : '/_vercel/insights/script.js';
-    if (!document.querySelector(`script[src="${src}"]`)) {
-      const script = document.createElement('script');
-      script.src = src;
-      script.defer = true;
-      script.dataset.sdkn = 'rdposti-static';
-      script.onerror = () => {
-        console.log(isLocal
-          ? '[Vercel Web Analytics] Script di debug non caricato (ad blocker?).'
-          : '[Vercel Web Analytics] Script non trovato: attiva Web Analytics nel progetto Vercel e rifai il deploy.');
-      };
-      document.head.appendChild(script);
-    }
-  }
-
-  /**
-   * Evento personalizzato. I valori devono essere string, number, boolean o null
-   * (gli oggetti annidati non sono ammessi da Vercel e vengono scartati).
-   * Nota: gli eventi personalizzati compaiono nella dashboard solo nei piani Pro/Enterprise.
-   */
-  function track(name, data) {
-    let clean;
-    if (data) {
-      clean = {};
-      for (const [k, v] of Object.entries(data)) {
-        if (v === null || ['string', 'number', 'boolean'].includes(typeof v)) clean[k] = v;
-      }
-    }
-    try {
-      window.va('event', clean ? { name, data: clean } : { name });
-    } catch (e) { /* l'analytics non deve mai rompere l'app */ }
-  }
-
-  window.RdPosti = window.RdPosti || {};
-  window.RdPosti.track = track;
-})();
+// Export track function for custom events
+window.RdPosti = window.RdPosti || {};
+window.RdPosti.track = track;
