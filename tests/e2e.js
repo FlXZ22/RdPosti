@@ -217,14 +217,16 @@ const NAMES = ['Mario Rossi', 'Giulia Bianchi', 'Luca Verdi', 'Anna Neri', 'Marc
   const ROOT = path.resolve(__dirname, '..');
   const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.ttf': 'font/ttf' };
   const FAKE_VA = 'window.__vaLoaded = true; window.__vaSeen = (window.vaq || []).map((a) => Array.from(a)); window.va = function () { window.__vaSeen.push(Array.from(arguments)); };';
+  const FAKE_SI = 'window.__siLoaded = true;';
+  const isVercelScript = (u) => u.pathname.startsWith('/_vercel/') || u.hostname === 'va.vercel-scripts.com';
   async function servePage(origin) {
     const p = await browser.newPage();
     const hits = [];
     await p.route('**/*', (route) => {
       const u = new URL(route.request().url());
-      if (u.pathname === '/_vercel/insights/script.js' || u.hostname === 'va.vercel-scripts.com') {
+      if (isVercelScript(u)) {
         hits.push(u.href);
-        return route.fulfill({ contentType: 'text/javascript', body: FAKE_VA });
+        return route.fulfill({ contentType: 'text/javascript', body: u.pathname.includes('speed-insights') ? FAKE_SI : FAKE_VA });
       }
       if (u.origin !== origin) return route.abort();
       const file = path.join(ROOT, decodeURIComponent(u.pathname === '/' ? '/index.html' : u.pathname));
@@ -232,15 +234,20 @@ const NAMES = ['Mario Rossi', 'Giulia Bianchi', 'Luca Verdi', 'Anna Neri', 'Marc
       route.fulfill({ contentType: TYPES[path.extname(file)] || 'application/octet-stream', body: fs.readFileSync(file) });
     });
     await p.goto(origin + '/');
-    await p.waitForFunction(() => window.__vaLoaded === true);
+    await p.waitForFunction(() => window.__vaLoaded === true && window.__siLoaded === true);
     return { p, hits };
   }
 
-  await step('analytics in produzione: carica /_vercel/insights/script.js e invia eventi', async () => {
+  await step('analytics in produzione: carica Web Analytics + Speed Insights e invia eventi', async () => {
     const { p, hits } = await servePage('https://rdposti.vercel.app');
-    assert.deepStrictEqual(hits, ['https://rdposti.vercel.app/_vercel/insights/script.js']);
-    const tag = await p.evaluate(() => { const s = document.querySelector('script[src="/_vercel/insights/script.js"]'); return s && s.defer; });
-    assert.strictEqual(tag, true, 'script con defer');
+    assert.deepStrictEqual(hits.sort(), [
+      'https://rdposti.vercel.app/_vercel/insights/script.js',
+      'https://rdposti.vercel.app/_vercel/speed-insights/script.js',
+    ]);
+    const tags = await p.evaluate(() => ['/_vercel/insights/script.js', '/_vercel/speed-insights/script.js']
+      .map((src) => { const s = document.querySelector(`script[src="${src}"]`); return s && s.defer; }));
+    assert.deepStrictEqual(tags, [true, true], 'script con defer');
+    assert.strictEqual(await p.evaluate(() => document.querySelector('script[src*="speed-insights"]').dataset.route), '/');
     p.on('dialog', (d) => d.accept());
     await p.click('[data-preset=triples]');
     await p.fill('#namesInput', NAMES.join(', '));
@@ -264,9 +271,12 @@ const NAMES = ['Mario Rossi', 'Giulia Bianchi', 'Luca Verdi', 'Anna Neri', 'Marc
     await p.close();
   });
 
-  await step('analytics su localhost: usa lo script di debug (non invia dati)', async () => {
+  await step('analytics su localhost: usa gli script di debug (non inviano dati)', async () => {
     const { p, hits } = await servePage('http://localhost:8080');
-    assert.deepStrictEqual(hits, ['https://va.vercel-scripts.com/v1/script.debug.js']);
+    assert.deepStrictEqual(hits.sort(), [
+      'https://va.vercel-scripts.com/v1/script.debug.js',
+      'https://va.vercel-scripts.com/v1/speed-insights/script.debug.js',
+    ]);
     await p.close();
   });
 

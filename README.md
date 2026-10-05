@@ -39,18 +39,22 @@ con *Stampa* ottieni la piantina: tutta la disposizione dei banchi, con i nomi, 
   gli scambi che abbassano la penalità vengono accettati, quelli che la alzano solo ogni tanto (sempre meno col passare
   del tempo), così l'algoritmo non resta bloccato. Se le regole sono impossibili da rispettare tutte, mostra quelle violate.
 
-## Analytics (Vercel)
+## Analytics e Speed Insights (Vercel)
 
-L'app usa **Vercel Web Analytics** nel modo previsto per i siti statici, senza npm (`js/analytics.js`):
-una coda `window.va` creata subito e lo script `/_vercel/insights/script.js` caricato con `defer`.
+L'app usa **Vercel Web Analytics** (visite) e **Speed Insights** (velocità reale: LCP, INP, CLS, FCP, TTFB)
+nel modo previsto per i siti statici, senza npm (`js/analytics.js`): le code `window.va` e `window.si` create subito
+e gli script `/_vercel/insights/script.js` e `/_vercel/speed-insights/script.js` caricati con `defer`.
 
-Per attivarle:
+Per attivarli:
 1. Fai il deploy della cartella su Vercel (nessun build: è un sito statico).
-2. Nella dashboard del progetto apri **Analytics → Enable**.
-3. Rifai il deploy: Vercel crea la route `/_vercel/insights/*` e le visite iniziano a comparire.
+2. Nella dashboard del progetto apri **Analytics → Enable** e **Speed Insights → Enable**.
+3. Rifai il deploy: Vercel crea le route `/_vercel/insights/*` e `/_vercel/speed-insights/*` e i dati iniziano
+   a comparire dopo qualche visita (Speed Insights misura i visitatori veri, quindi apri il sito e usalo un po').
 
-- Su `localhost` viene caricato lo script di debug (scrive in console, non invia nulla); aprendo `index.html`
+- Su `localhost` vengono caricati gli script di debug (scrivono in console, non inviano nulla); aprendo `index.html`
   come file non viene caricato niente.
+- Il pacchetto npm `@vercel/speed-insights` della schermata "Get Started" di Vercel serve solo ai progetti con
+  bundler (Next.js, Vite…): qui fa la stessa cosa lo script, senza dipendenze.
 - Eventi personalizzati: *Genera disposizione* (numero di studenti, banchi, regole, violazioni), *Regola aggiunta* (tipo),
   *Disposizione rapida* (tipo), *Stampa*, *Esporta*, *Importa*. Contengono solo numeri e tipi, **mai i nomi degli studenti**.
   Nella dashboard gli eventi personalizzati si vedono con i piani Pro/Enterprise; le visite in tutti i piani.
@@ -75,7 +79,7 @@ css/style.css       stile
 js/unionfind.js     Union-Find
 js/solver.js        geometria dell'aula + algoritmo
 js/app.js           interfaccia, drag & drop, regole
-js/analytics.js     Vercel Web Analytics + eventi
+js/analytics.js     Vercel Web Analytics + Speed Insights + eventi
 tests/              test dell'algoritmo (node --test) e dell'app nel browser (e2e.js)
 assets/logo.png     logo
 assets/favicon*.png favicon (monogramma Rd)
