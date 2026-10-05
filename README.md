@@ -39,6 +39,22 @@ con *Stampa* ottieni la piantina: tutta la disposizione dei banchi, con i nomi, 
   gli scambi che abbassano la penalità vengono accettati, quelli che la alzano solo ogni tanto (sempre meno col passare
   del tempo), così l'algoritmo non resta bloccato. Se le regole sono impossibili da rispettare tutte, mostra quelle violate.
 
+## Analytics (Vercel)
+
+L'app usa **Vercel Web Analytics** nel modo previsto per i siti statici, senza npm (`js/analytics.js`):
+una coda `window.va` creata subito e lo script `/_vercel/insights/script.js` caricato con `defer`.
+
+Per attivarle:
+1. Fai il deploy della cartella su Vercel (nessun build: è un sito statico).
+2. Nella dashboard del progetto apri **Analytics → Enable**.
+3. Rifai il deploy: Vercel crea la route `/_vercel/insights/*` e le visite iniziano a comparire.
+
+- Su `localhost` viene caricato lo script di debug (scrive in console, non invia nulla); aprendo `index.html`
+  come file non viene caricato niente.
+- Eventi personalizzati: *Genera disposizione* (numero di studenti, banchi, regole, violazioni), *Regola aggiunta* (tipo),
+  *Disposizione rapida* (tipo), *Stampa*, *Esporta*, *Importa*. Contengono solo numeri e tipi, **mai i nomi degli studenti**.
+  Nella dashboard gli eventi personalizzati si vedono con i piani Pro/Enterprise; le visite in tutti i piani.
+
 ## Font e icone
 
 - Il font del logo è **Della Respira** (SIL Open Font License, vedi `assets/fonts/OFL.txt`), incluso in locale e usato in tutta l'app.
@@ -59,6 +75,7 @@ css/style.css       stile
 js/unionfind.js     Union-Find
 js/solver.js        geometria dell'aula + algoritmo
 js/app.js           interfaccia, drag & drop, regole
+js/analytics.js     Vercel Web Analytics + eventi
 tests/              test dell'algoritmo (node --test) e dell'app nel browser (e2e.js)
 assets/logo.png     logo
 assets/favicon*.png favicon (monogramma Rd)

@@ -11,7 +11,7 @@ function loadPlaywright() {
   process.exit(1);
 }
 
-const URL = 'file://' + path.resolve(__dirname, '..', 'index.html');
+const PAGE_URL = 'file://' + path.resolve(__dirname, '..', 'index.html');
 const NAMES = ['Mario Rossi', 'Giulia Bianchi', 'Luca Verdi', 'Anna Neri', 'Marco Gallo', 'Sara Costa', 'Paolo Fontana',
   'Elena Conti', 'Davide Ricci', 'Chiara Greco', 'Simone Bruno', 'Laura Marino', 'Andrea Colombo', 'Francesca Romano',
   'Matteo Lombardi', 'Alessia Moretti', 'Federico Barbieri', 'Martina Esposito', 'Riccardo De Luca', 'Giorgia Mancini',
@@ -24,7 +24,7 @@ const NAMES = ['Mario Rossi', 'Giulia Bianchi', 'Luca Verdi', 'Anna Neri', 'Marc
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('dialog', (d) => d.accept());
-  await page.goto(URL);
+  await page.goto(PAGE_URL);
 
   const results = [];
   const step = async (name, fn) => {
@@ -202,9 +202,77 @@ const NAMES = ['Mario Rossi', 'Giulia Bianchi', 'Luca Verdi', 'Anna Neri', 'Marc
     await page.emulateMedia({ media: 'screen' });
   });
 
+  await step('analytics da file://: nessuno script, eventi solo in coda e senza nomi', async () => {
+    const scripts = await page.evaluate(() => [...document.scripts].map((x) => x.src).filter((x) => /vercel/.test(x)));
+    assert.deepStrictEqual(scripts, []);
+    const queued = await page.evaluate(() => JSON.stringify(window.vaq || []));
+    // la coda riparte a ogni ricarica: qui ci sono gli eventi dopo l'ultimo reload
+    assert.match(queued, /Genera disposizione/);
+    assert.match(queued, /Disposizione rapida/);
+    for (const name of NAMES) for (const part of name.split(' ')) assert.ok(!queued.includes(part), `nome nei dati: ${part}`);
+  });
+
+  // Serve i file del progetto da un dominio finto, come se fosse il deploy su Vercel
+  const fs = require('node:fs');
+  const ROOT = path.resolve(__dirname, '..');
+  const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.ttf': 'font/ttf' };
+  const FAKE_VA = 'window.__vaLoaded = true; window.__vaSeen = (window.vaq || []).map((a) => Array.from(a)); window.va = function () { window.__vaSeen.push(Array.from(arguments)); };';
+  async function servePage(origin) {
+    const p = await browser.newPage();
+    const hits = [];
+    await p.route('**/*', (route) => {
+      const u = new URL(route.request().url());
+      if (u.pathname === '/_vercel/insights/script.js' || u.hostname === 'va.vercel-scripts.com') {
+        hits.push(u.href);
+        return route.fulfill({ contentType: 'text/javascript', body: FAKE_VA });
+      }
+      if (u.origin !== origin) return route.abort();
+      const file = path.join(ROOT, decodeURIComponent(u.pathname === '/' ? '/index.html' : u.pathname));
+      if (!file.startsWith(ROOT) || !fs.existsSync(file)) return route.fulfill({ status: 404, body: '' });
+      route.fulfill({ contentType: TYPES[path.extname(file)] || 'application/octet-stream', body: fs.readFileSync(file) });
+    });
+    await p.goto(origin + '/');
+    await p.waitForFunction(() => window.__vaLoaded === true);
+    return { p, hits };
+  }
+
+  await step('analytics in produzione: carica /_vercel/insights/script.js e invia eventi', async () => {
+    const { p, hits } = await servePage('https://rdposti.vercel.app');
+    assert.deepStrictEqual(hits, ['https://rdposti.vercel.app/_vercel/insights/script.js']);
+    const tag = await p.evaluate(() => { const s = document.querySelector('script[src="/_vercel/insights/script.js"]'); return s && s.defer; });
+    assert.strictEqual(tag, true, 'script con defer');
+    p.on('dialog', (d) => d.accept());
+    await p.click('[data-preset=triples]');
+    await p.fill('#namesInput', NAMES.join(', '));
+    await p.waitForTimeout(300);
+    await p.click('#rulesToggle');
+    await p.click('.type-opt[data-type=separa]');
+    await p.selectOption('#ruleA', 'Mario Rossi');
+    await p.selectOption('#ruleB', 'Luca Verdi');
+    await p.click('#ruleForm button[type=submit]');
+    await p.click('#btnGenerate');
+    const seen = await p.evaluate(() => window.__vaSeen);
+    const rule = seen.find((a) => a[0] === 'event' && a[1].name === 'Regola aggiunta');
+    assert.deepStrictEqual(rule && rule[1].data, { tipo: 'separa' });
+    const gen = seen.find((a) => a[0] === 'event' && a[1].name === 'Genera disposizione');
+    assert.ok(gen, 'evento Genera disposizione');
+    assert.deepStrictEqual(Object.keys(gen[1].data).sort(), ['banchi', 'regole', 'studenti', 'violazioni']);
+    assert.strictEqual(gen[1].data.studenti, 24);
+    assert.ok(Object.values(gen[1].data).every((v) => typeof v === 'number'));
+    const all = JSON.stringify(seen);
+    for (const name of NAMES) assert.ok(!all.includes(name.split(' ')[1]), 'nessun cognome negli eventi');
+    await p.close();
+  });
+
+  await step('analytics su localhost: usa lo script di debug (non invia dati)', async () => {
+    const { p, hits } = await servePage('http://localhost:8080');
+    assert.deepStrictEqual(hits, ['https://va.vercel-scripts.com/v1/script.debug.js']);
+    await p.close();
+  });
+
   await step('telefono: nessuno scroll orizzontale', async () => {
     const m = await browser.newPage({ viewport: { width: 390, height: 844 } });
-    await m.goto(URL);
+    await m.goto(PAGE_URL);
     assert.strictEqual(await m.evaluate(() => document.documentElement.scrollWidth), 390);
     await m.close();
   });

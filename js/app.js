@@ -2,6 +2,7 @@
 (function () {
   'use strict';
   const { buildLayout, parseNames, compileRules, evaluate, solve, RULE_TYPES } = window.RdPosti;
+  const track = window.RdPosti.track || (() => {});
 
   const STORAGE_KEY = 'rdposti:v1';
   const SIZES = { desk: { w: 1, h: 1 }, teacher: { w: 3, h: 1 } };
@@ -789,6 +790,12 @@
     });
     selectedDesk = null;
     render();
+    track('Genera disposizione', {
+      studenti: students.length,
+      banchi: layout.seats.length,
+      regole: compileRules(state.rules, students).length,
+      violazioni: res.violations.length,
+    });
     const missing = students.length - layout.seats.length;
     if (missing > 0) toast(`Attenzione: ${missing} studenti senza banco`);
     else if (!res.violations.length) toast(state.rules.length ? 'Fatto, tutte le regole rispettate' : 'Disposizione generata');
@@ -839,6 +846,7 @@
     const conflict = state.rules.find((r) => pair && r.type !== type && RULE_TYPES[r.type].pair && ((r.a === a && r.b === b) || (r.a === b && r.b === a)));
     if (conflict) return toast('C’è già una regola opposta per questa coppia');
     state.rules.push({ id: uid(), type, a, b });
+    track('Regola aggiunta', { tipo: type });
     render();
   });
 
@@ -856,6 +864,7 @@
       const name = b.dataset.preset;
       if (state.items.length && !confirm('Sostituire la disposizione attuale dell’aula?')) return;
       state.items = preset(name, state.cols, state.rows);
+      track('Disposizione rapida', { tipo: name });
       state.assign = {};
       selectedDesk = null;
       render();
@@ -890,6 +899,7 @@
     const a = el('a');
     a.href = URL.createObjectURL(blob);
     a.download = 'rdposti-classe.json';
+    track('Esporta');
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   });
@@ -908,6 +918,7 @@
       selectedDesk = null;
       render();
       toast('Classe importata');
+      track('Importa');
     } catch (err) {
       toast('File non valido');
     }
@@ -1033,6 +1044,7 @@
 
   window.addEventListener('beforeprint', preparePrint);
   $('#btnPrint').addEventListener('click', () => {
+    track('Stampa', { banchi: state.items.filter((it) => it.type === 'desk').length });
     preparePrint();
     window.print();
   });
