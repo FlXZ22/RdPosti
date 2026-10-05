@@ -1,7 +1,8 @@
-// Test end-to-end nel browser (Chromium via Playwright).
-// Esegui con: npm run test:e2e   (richiede Playwright installato)
+// Test end-to-end nel browser (Chromium via Playwright) sul sito esportato da Next.js (out/).
+// Esegui con: npm run test:e2e   (fa prima "next build"; richiede Playwright installato)
 const assert = require('node:assert');
 const path = require('node:path');
+const fs = require('node:fs');
 
 function loadPlaywright() {
   for (const id of ['playwright', '/opt/node22/lib/node_modules/playwright']) {
@@ -11,7 +12,34 @@ function loadPlaywright() {
   process.exit(1);
 }
 
-const PAGE_URL = 'file://' + path.resolve(__dirname, '..', 'index.html');
+const OUT = path.resolve(__dirname, '..', 'out');
+const ORIGIN = 'https://rdposti.vercel.app'; // dominio finto: come se fosse il deploy su Vercel
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.ttf': 'font/ttf', '.txt': 'text/plain' };
+// Al posto degli script veri di Vercel: registrano cosa ricevono
+const FAKE_VA = 'window.__vaLoaded = true; window.__vaSeen = (window.vaq || []).map((a) => Array.from(a)); window.va = function () { window.__vaSeen.push(Array.from(arguments)); };';
+const FAKE_SI = 'window.__siLoaded = true;';
+
+/** Apre una pagina che riceve i file di out/ dal dominio finto e intercetta gli script di Vercel. */
+async function openSite(browser, viewport) {
+  const p = await browser.newPage(viewport ? { viewport } : {});
+  p.vercelHits = [];
+  await p.route('**/*', (route) => {
+    const u = new URL(route.request().url());
+    if (u.pathname.startsWith('/_vercel/') || u.hostname === 'va.vercel-scripts.com') {
+      p.vercelHits.push(u.href);
+      return route.fulfill({ contentType: 'text/javascript', body: u.pathname.includes('speed-insights') ? FAKE_SI : FAKE_VA });
+    }
+    if (u.origin !== ORIGIN) return route.abort();
+    let file = path.join(OUT, decodeURIComponent(u.pathname));
+    if (u.pathname.endsWith('/')) file = path.join(file, 'index.html');
+    if (!file.startsWith(OUT) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return route.fulfill({ status: 404, body: '' });
+    route.fulfill({ contentType: TYPES[path.extname(file)] || 'application/octet-stream', body: fs.readFileSync(file) });
+  });
+  return p;
+}
+
+/** Aspetta che l'app (caricata dopo l'idratazione di React) abbia disegnato la prima volta. */
+const appReady = (p) => p.waitForFunction(() => document.querySelector('#stats') && document.querySelector('#stats').textContent.length > 0);
 const NAMES = ['Mario Rossi', 'Giulia Bianchi', 'Luca Verdi', 'Anna Neri', 'Marco Gallo', 'Sara Costa', 'Paolo Fontana',
   'Elena Conti', 'Davide Ricci', 'Chiara Greco', 'Simone Bruno', 'Laura Marino', 'Andrea Colombo', 'Francesca Romano',
   'Matteo Lombardi', 'Alessia Moretti', 'Federico Barbieri', 'Martina Esposito', 'Riccardo De Luca', 'Giorgia Mancini',
@@ -20,11 +48,17 @@ const NAMES = ['Mario Rossi', 'Giulia Bianchi', 'Luca Verdi', 'Anna Neri', 'Marc
 (async () => {
   const { chromium } = loadPlaywright();
   const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  if (!fs.existsSync(path.join(OUT, 'index.html'))) {
+    console.error('Manca out/index.html: esegui prima "npm run build"');
+    process.exit(1);
+  }
+  const page = await openSite(browser, { width: 1440, height: 1000 });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('dialog', (d) => d.accept());
-  await page.goto(PAGE_URL);
+  await page.goto(ORIGIN + '/');
+  await appReady(page);
 
   const results = [];
   const step = async (name, fn) => {
@@ -40,7 +74,7 @@ const NAMES = ['Mario Rossi', 'Giulia Bianchi', 'Luca Verdi', 'Anna Neri', 'Marc
 
   await step('favicon e font del logo', async () => {
     const icons = await page.evaluate(() => [...document.querySelectorAll('link[rel~=icon]')].map((l) => l.getAttribute('href')));
-    assert.ok(icons.includes('assets/favicon.png'));
+    assert.ok(icons.includes('/assets/favicon.png'), JSON.stringify(icons));
     const ok = await page.evaluate(async () => { await document.fonts.ready; return document.fonts.check("16px 'Della Respira'"); });
     assert.ok(ok);
   });
@@ -184,6 +218,7 @@ const NAMES = ['Mario Rossi', 'Giulia Bianchi', 'Luca Verdi', 'Anna Neri', 'Marc
 
   await step('salvataggio dopo ricarica', async () => {
     await page.reload();
+    await appReady(page);
     assert.strictEqual(await page.locator('.desk.filled').count(), 24);
     assert.strictEqual(await page.locator('#rulesBadge').textContent(), '7');
   });
@@ -202,46 +237,30 @@ const NAMES = ['Mario Rossi', 'Giulia Bianchi', 'Luca Verdi', 'Anna Neri', 'Marc
     await page.emulateMedia({ media: 'screen' });
   });
 
-  await step('analytics da file://: nessuno script, eventi solo in coda e senza nomi', async () => {
-    const scripts = await page.evaluate(() => [...document.scripts].map((x) => x.src).filter((x) => /vercel/.test(x)));
-    assert.deepStrictEqual(scripts, []);
-    const queued = await page.evaluate(() => JSON.stringify(window.vaq || []));
-    // la coda riparte a ogni ricarica: qui ci sono gli eventi dopo l'ultimo reload
-    assert.match(queued, /Genera disposizione/);
-    assert.match(queued, /Disposizione rapida/);
-    for (const name of NAMES) for (const part of name.split(' ')) assert.ok(!queued.includes(part), `nome nei dati: ${part}`);
+  await step('Vercel <Analytics /> e <SpeedInsights /> di Next.js caricano i loro script', async () => {
+    const p = await openSite(browser);
+    await p.goto(ORIGIN + '/');
+    await p.waitForFunction(() => window.__vaLoaded === true && window.__siLoaded === true);
+    assert.deepStrictEqual(p.vercelHits.sort(), [
+      ORIGIN + '/_vercel/insights/script.js',
+      ORIGIN + '/_vercel/speed-insights/script.js',
+    ]);
+    // data-sdkn dice chi ha inserito lo script: devono essere i componenti /next
+    const sdk = await p.evaluate(() => [...document.querySelectorAll('script[src^="/_vercel/"]')]
+      .map((x) => [x.getAttribute('src'), x.dataset.sdkn, x.defer]).sort());
+    assert.deepStrictEqual(sdk.map((x) => [x[0], x[1], x[2]]), [
+      ['/_vercel/insights/script.js', '@vercel/analytics/next', true],
+      ['/_vercel/speed-insights/script.js', '@vercel/speed-insights/next', true],
+    ]);
+    await p.close();
   });
 
-  // Serve i file del progetto da un dominio finto, come se fosse il deploy su Vercel
-  const fs = require('node:fs');
-  const ROOT = path.resolve(__dirname, '..');
-  const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.ttf': 'font/ttf' };
-  const FAKE_VA = 'window.__vaLoaded = true; window.__vaSeen = (window.vaq || []).map((a) => Array.from(a)); window.va = function () { window.__vaSeen.push(Array.from(arguments)); };';
-  async function servePage(origin) {
-    const p = await browser.newPage();
-    const hits = [];
-    await p.route('**/*', (route) => {
-      const u = new URL(route.request().url());
-      if (u.pathname === '/_vercel/insights/script.js' || u.hostname === 'va.vercel-scripts.com') {
-        hits.push(u.href);
-        return route.fulfill({ contentType: 'text/javascript', body: FAKE_VA });
-      }
-      if (u.origin !== origin) return route.abort();
-      const file = path.join(ROOT, decodeURIComponent(u.pathname === '/' ? '/index.html' : u.pathname));
-      if (!file.startsWith(ROOT) || !fs.existsSync(file)) return route.fulfill({ status: 404, body: '' });
-      route.fulfill({ contentType: TYPES[path.extname(file)] || 'application/octet-stream', body: fs.readFileSync(file) });
-    });
-    await p.goto(origin + '/');
-    await p.waitForFunction(() => window.__vaLoaded === true);
-    return { p, hits };
-  }
-
-  await step('analytics in produzione: carica /_vercel/insights/script.js e invia eventi', async () => {
-    const { p, hits } = await servePage('https://rdposti.vercel.app');
-    assert.deepStrictEqual(hits, ['https://rdposti.vercel.app/_vercel/insights/script.js']);
-    const tag = await p.evaluate(() => { const s = document.querySelector('script[src="/_vercel/insights/script.js"]'); return s && s.defer; });
-    assert.strictEqual(tag, true, 'script con defer');
+  await step('eventi personalizzati con track() di @vercel/analytics, senza nomi', async () => {
+    const p = await openSite(browser);
     p.on('dialog', (d) => d.accept());
+    await p.goto(ORIGIN + '/');
+    await appReady(p);
+    await p.waitForFunction(() => window.__vaLoaded === true);
     await p.click('[data-preset=triples]');
     await p.fill('#namesInput', NAMES.join(', '));
     await p.waitForTimeout(300);
@@ -252,27 +271,21 @@ const NAMES = ['Mario Rossi', 'Giulia Bianchi', 'Luca Verdi', 'Anna Neri', 'Marc
     await p.click('#ruleForm button[type=submit]');
     await p.click('#btnGenerate');
     const seen = await p.evaluate(() => window.__vaSeen);
-    const rule = seen.find((a) => a[0] === 'event' && a[1].name === 'Regola aggiunta');
-    assert.deepStrictEqual(rule && rule[1].data, { tipo: 'separa' });
-    const gen = seen.find((a) => a[0] === 'event' && a[1].name === 'Genera disposizione');
-    assert.ok(gen, 'evento Genera disposizione');
-    assert.deepStrictEqual(Object.keys(gen[1].data).sort(), ['banchi', 'regole', 'studenti', 'violazioni']);
-    assert.strictEqual(gen[1].data.studenti, 24);
-    assert.ok(Object.values(gen[1].data).every((v) => typeof v === 'number'));
+    const ev = (name) => seen.find((a) => a[0] === 'event' && a[1].name === name);
+    assert.deepStrictEqual(ev('Disposizione rapida')[1].data, { tipo: 'triples' });
+    assert.deepStrictEqual(ev('Regola aggiunta')[1].data, { tipo: 'separa' });
+    const gen = ev('Genera disposizione')[1].data;
+    assert.deepStrictEqual(Object.keys(gen).sort(), ['banchi', 'regole', 'studenti', 'violazioni']);
+    assert.strictEqual(gen.studenti, 24);
     const all = JSON.stringify(seen);
-    for (const name of NAMES) assert.ok(!all.includes(name.split(' ')[1]), 'nessun cognome negli eventi');
-    await p.close();
-  });
-
-  await step('analytics su localhost: usa lo script di debug (non invia dati)', async () => {
-    const { p, hits } = await servePage('http://localhost:8080');
-    assert.deepStrictEqual(hits, ['https://va.vercel-scripts.com/v1/script.debug.js']);
+    for (const name of NAMES) for (const part of name.split(' ')) assert.ok(!all.includes(part), `nome negli eventi: ${part}`);
     await p.close();
   });
 
   await step('telefono: nessuno scroll orizzontale', async () => {
-    const m = await browser.newPage({ viewport: { width: 390, height: 844 } });
-    await m.goto(PAGE_URL);
+    const m = await openSite(browser, { width: 390, height: 844 });
+    await m.goto(ORIGIN + '/');
+    await appReady(m);
     assert.strictEqual(await m.evaluate(() => document.documentElement.scrollWidth), 390);
     await m.close();
   });

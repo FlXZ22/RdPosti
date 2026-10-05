@@ -1,6 +1,9 @@
 node_modules/
-.DS_Store
-*.log
+.next/
+out/
+next-env.d.ts
+.vercel
 .env
 .env.local
-.vercel
+*.log
+.DS_Store

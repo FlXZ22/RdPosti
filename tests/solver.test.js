@@ -1,8 +1,8 @@
 // Esegui con: node --test tests/
 const test = require('node:test');
 const assert = require('node:assert');
-const { UnionFind } = require('../js/unionfind.js');
-const { buildLayout, parseNames, solve, makeRng, REL } = require('../js/solver.js');
+const { UnionFind } = require('../public/js/unionfind.js');
+const { buildLayout, parseNames, solve, makeRng, REL } = require('../public/js/solver.js');
 
 const desk = (id, c, r) => ({ id, type: 'desk', c, r, w: 1, h: 1 });
 

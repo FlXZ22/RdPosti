@@ -957,7 +957,7 @@
 
     const head = el('div', 'print-head');
     const logo = el('img');
-    logo.src = 'assets/logo.png';
+    logo.src = '/assets/logo.png';
     logo.alt = 'RdPosti';
     head.appendChild(logo);
     const nAssigned = d.pos.filter((p) => p >= 0).length;
